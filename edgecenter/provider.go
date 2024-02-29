@@ -172,6 +172,7 @@ func Provider() *schema.Provider {
 			"edgecenter_storage_s3_bucket": dataSourceStorageS3Bucket(),
 			"edgecenter_reservedfixedip":   dataSourceReservedFixedIP(),
 			"edgecenter_servergroup":       dataSourceServerGroup(),
+			"edgecenter_snapshot":          dataSourceSnapshot(),
 			"edgecenter_k8s":               dataSourceK8s(),
 			"edgecenter_k8s_pool":          dataSourceK8sPool(),
 			"edgecenter_k8s_client_config": dataSourceK8sClientConfig(),
