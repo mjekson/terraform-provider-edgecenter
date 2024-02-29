@@ -2,10 +2,12 @@ package edgecenter
 
 import (
 	"context"
-	edgecloudV2 "github.com/Edge-Center/edgecentercloud-go/v2"
+	"log"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"log"
+
+	edgecloudV2 "github.com/Edge-Center/edgecentercloud-go/v2"
 )
 
 func dataSourceSnapshot() *schema.Resource {
@@ -149,7 +151,8 @@ func dataSourceSnapshotRead(ctx context.Context, d *schema.ResourceData, m inter
 	}
 
 	var foundSnapshots []*edgecloudV2.Snapshot
-	for _, snapshot := range allSnapshots {
+	for _, s := range allSnapshots {
+		snapshot := s
 		if name == snapshot.Name {
 			foundSnapshots = append(foundSnapshots, &snapshot)
 		}
@@ -186,7 +189,7 @@ func setSnapshotData(d *schema.ResourceData, snapshot *edgecloudV2.Snapshot) {
 	d.Set("snapshot_id", snapshot.ID)
 
 	if err := d.Set("metadata", snapshot.Metadata); err != nil {
-		diags = append(diags, diag.Diagnostic{
+		_ = append(diags, diag.Diagnostic{
 			Severity: diag.Error,
 			Summary:  "Failed to set metadata",
 			Detail:   err.Error(),
