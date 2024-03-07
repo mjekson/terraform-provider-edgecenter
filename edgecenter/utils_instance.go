@@ -61,13 +61,7 @@ func (s instanceInterfaces) Less(i, j int) bool {
 
 	lOrder, _ := ifLeft["order"].(int)
 	rOrder, _ := ifRight["order"].(int)
-	if lOrder != rOrder {
-		return lOrder < rOrder
-	}
-	lPortID, _ := ifLeft["port_id"].(string)
-	rPortID, _ := ifRight["port_id"].(string)
-
-	return lPortID < rPortID
+	return lOrder < rOrder
 }
 
 func (s instanceInterfaces) Swap(i, j int) {
@@ -149,6 +143,27 @@ func extractInstanceInterfaceToListReadV2(interfaces []interface{}) map[string]O
 	}
 
 	return orderedInterfacesMap
+}
+
+// extractInstanceInterfaceToListReadV2 creates a list of InterfaceOpts objects from a list of interfaces.
+func extractInstanceInterfaceToListReadV3(interfaces []interface{}) []OrderedInterfaceOpts {
+	orderedInterfacesOpts := make([]OrderedInterfaceOpts, 0, len(interfaces))
+	for _, iFace := range interfaces {
+		var orderedInstanceIfs OrderedInterfaceOpts
+		if iFace == nil {
+			continue
+		}
+
+		iFaceMap := iFace.(map[string]interface{})
+		interfaceOpts := decodeInstanceInterfaceOptsV2(iFaceMap)
+		orderedInstanceIfs.InstanceInterface = interfaceOpts
+		orderedInstanceIfs.IPAddress = iFaceMap["ip_address"].(string)
+		orderedInstanceIfs.Order = iFaceMap["order"].(int)
+
+		orderedInterfacesOpts = append(orderedInterfacesOpts, orderedInstanceIfs)
+	}
+
+	return orderedInterfacesOpts
 }
 
 // extractInstanceVolumesMap converts a slice of instance volumes into a map of volume IDs to boolean values.

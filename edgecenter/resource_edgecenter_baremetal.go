@@ -428,87 +428,133 @@ func resourceBmInstanceRead(ctx context.Context, d *schema.ResourceData, m inter
 		return diag.Errorf("interface not found")
 	}
 
-	ifs := d.Get("interface").([]interface{})
-	orderedInterfacesMap := extractInstanceInterfaceToListReadV2(ifs)
+	ifs := d.Get("interface")
+	ifsList := ifs.([]interface{})
+	ifsFromTf := extractInstanceInterfaceToListReadV3(ifsList)
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	//
 
 	var interfacesList []interface{}
-	for _, iFace := range interfacesListAPI {
-		if len(iFace.IPAssignments) == 0 {
-			continue
-		}
-		for _, assignment := range iFace.IPAssignments {
-			subnetID := assignment.SubnetID
-
-			var interfaceOpts OrderedInterfaceOpts
-			var orderedInterfaceOpts OrderedInterfaceOpts
-			var ok bool
-
-			// we need to match our interfaces with api's interfaces
-			// but with don't have any unique value, that's why we use exactly that list of keys
-			for _, k := range []string{subnetID, iFace.PortID, iFace.NetworkID, string(edgecloudV2.InterfaceTypeExternal)} {
-				if orderedInterfaceOpts, ok = orderedInterfacesMap[k]; ok {
-					interfaceOpts = orderedInterfaceOpts
-					break
-				}
-			}
-
-			if !ok {
-				continue
-			}
-
-			i := make(map[string]interface{})
-			i["type"] = interfaceOpts.InstanceInterface.Type
-			i["order"] = interfaceOpts.Order
-			i["network_id"] = iFace.NetworkID
-			i["subnet_id"] = subnetID
-			i["port_id"] = iFace.PortID
-			if iFace.SubPorts != nil {
-				i["is_parent"] = true
-			}
-			if interfaceOpts.InstanceInterface.FloatingIP != nil {
-				i["fip_source"] = interfaceOpts.InstanceInterface.FloatingIP.Source
-				i["existing_fip_id"] = interfaceOpts.InstanceInterface.FloatingIP.ExistingFloatingID
-			}
-			i["ip_address"] = assignment.IPAddress.String()
-
-			interfacesList = append(interfacesList, i)
-		}
-		for _, iFaceSubPort := range iFace.SubPorts {
-			for _, assignmentSubPort := range iFaceSubPort.IPAssignments {
-				assignmentSubnetID := assignmentSubPort.SubnetID
-
-				var interfaceOpts OrderedInterfaceOpts
-				var orderedInterfaceOpts OrderedInterfaceOpts
-				var ok bool
-
-				for _, k := range []string{assignmentSubnetID, iFaceSubPort.PortID, iFaceSubPort.NetworkID, string(edgecloudV2.InterfaceTypeExternal)} {
-					if orderedInterfaceOpts, ok = orderedInterfacesMap[k]; ok {
-						interfaceOpts = orderedInterfaceOpts
-						break
+	for _, iface := range ifsFromTf {
+		interfaceOpts := make(map[string]interface{})
+		for _, ifsAPI := range interfacesListAPI {
+			for _, assignment := range ifsAPI.IPAssignments {
+				subnetID := assignment.SubnetID
+				if subnetID == iface.InstanceInterface.SubnetID ||
+					ifsAPI.PortID == iface.InstanceInterface.PortID ||
+					ifsAPI.NetworkID == iface.InstanceInterface.NetworkID ||
+					assignment.IPAddress.String() == iface.IPAddress {
+					interfaceOpts["network_id"] = ifsAPI.NetworkID
+					interfaceOpts["subnet_id"] = subnetID
+					interfaceOpts["port_id"] = ifsAPI.PortID
+					if ifsAPI.SubPorts != nil {
+						interfaceOpts["is_parent"] = true
 					}
+				} else {
+					interfaceOpts["network_id"] = iface.InstanceInterface.NetworkID
+					interfaceOpts["subnet_id"] = iface.InstanceInterface.SubnetID
 				}
-
-				i := make(map[string]interface{})
-
-				i["type"] = interfaceOpts.InstanceInterface.Type
-				i["order"] = interfaceOpts.Order
-				i["network_id"] = iFaceSubPort.NetworkID
-				i["subnet_id"] = assignmentSubnetID
-				i["port_id"] = iFaceSubPort.PortID
-				i["is_parent"] = false
-				if interfaceOpts.InstanceInterface.FloatingIP != nil {
-					i["fip_source"] = interfaceOpts.InstanceInterface.FloatingIP.Source
-					i["existing_fip_id"] = interfaceOpts.InstanceInterface.FloatingIP.ExistingFloatingID
+				interfaceOpts["type"] = iface.InstanceInterface.Type
+				interfaceOpts["order"] = iface.Order
+				interfacesList = append(interfacesList, interfaceOpts)
+			}
+			for _, subIfaceAPI := range ifsAPI.SubPorts {
+				for _, assignment := range subIfaceAPI.IPAssignments {
+					subnetID := assignment.SubnetID
+					if subnetID == iface.InstanceInterface.SubnetID ||
+						subIfaceAPI.PortID == iface.InstanceInterface.PortID ||
+						subIfaceAPI.NetworkID == iface.InstanceInterface.NetworkID ||
+						assignment.IPAddress.String() == iface.IPAddress {
+						interfaceOpts["network_id"] = subIfaceAPI.NetworkID
+						interfaceOpts["subnet_id"] = subnetID
+						interfaceOpts["port_id"] = subIfaceAPI.PortID
+					} else {
+						interfaceOpts["network_id"] = iface.InstanceInterface.NetworkID
+						interfaceOpts["subnet_id"] = iface.InstanceInterface.SubnetID
+					}
+					interfaceOpts["type"] = iface.InstanceInterface.Type
+					interfaceOpts["order"] = iface.Order
+					interfacesList = append(interfacesList, interfaceOpts)
 				}
-				i["ip_address"] = assignmentSubPort.IPAddress.String()
-
-				interfacesList = append(interfacesList, i)
 			}
 		}
 	}
+	// for _, iFace := range interfacesListAPI {
+	// 	if len(iFace.IPAssignments) == 0 {
+	// 		continue
+	// 	}
+	// 	for _, assignment := range iFace.IPAssignments {
+	// 		subnetID := assignment.SubnetID
+	//
+	// 		var interfaceOpts OrderedInterfaceOpts
+	// 		var orderedInterfaceOpts OrderedInterfaceOpts
+	// 		var ok bool
+	//
+	// 		// we need to match our interfaces with api's interfaces
+	// 		// but with don't have any unique value, that's why we use exactly that list of keys
+	// 		for _, k := range []string{subnetID, iFace.PortID, iFace.NetworkID, string(edgecloudV2.InterfaceTypeExternal)} {
+	// 			if orderedInterfaceOpts, ok = orderedInterfacesMap[k]; ok {
+	// 				interfaceOpts = orderedInterfaceOpts
+	// 				break
+	// 			}
+	// 		}
+	//
+	// 		if !ok {
+	// 			continue
+	// 		}
+	//
+	// 		i := make(map[string]interface{})
+	// 		i["type"] = interfaceOpts.InstanceInterface.Type
+	// 		i["order"] = interfaceOpts.Order
+	// 		i["network_id"] = iFace.NetworkID
+	// 		i["subnet_id"] = subnetID
+	// 		i["port_id"] = iFace.PortID
+	// 		if iFace.SubPorts != nil {
+	// 			i["is_parent"] = true
+	// 		}
+	// 		if interfaceOpts.InstanceInterface.FloatingIP != nil {
+	// 			i["fip_source"] = interfaceOpts.InstanceInterface.FloatingIP.Source
+	// 			i["existing_fip_id"] = interfaceOpts.InstanceInterface.FloatingIP.ExistingFloatingID
+	// 		}
+	// 		i["ip_address"] = assignment.IPAddress.String()
+	//
+	// 		interfacesList = append(interfacesList, i)
+	// 	}
+	// 	for _, iFaceSubPort := range iFace.SubPorts {
+	// 		for _, assignmentSubPort := range iFaceSubPort.IPAssignments {
+	// 			assignmentSubnetID := assignmentSubPort.SubnetID
+	//
+	// 			var interfaceOpts OrderedInterfaceOpts
+	// 			var orderedInterfaceOpts OrderedInterfaceOpts
+	// 			var ok bool
+	//
+	// 			for _, k := range []string{assignmentSubnetID, iFaceSubPort.PortID, iFaceSubPort.NetworkID, string(edgecloudV2.InterfaceTypeExternal)} {
+	// 				if orderedInterfaceOpts, ok = orderedInterfacesMap[k]; ok {
+	// 					interfaceOpts = orderedInterfaceOpts
+	// 					break
+	// 				}
+	// 			}
+	//
+	// 			i := make(map[string]interface{})
+	//
+	// 			i["type"] = interfaceOpts.InstanceInterface.Type
+	// 			i["order"] = interfaceOpts.Order
+	// 			i["network_id"] = iFaceSubPort.NetworkID
+	// 			i["subnet_id"] = assignmentSubnetID
+	// 			i["port_id"] = iFaceSubPort.PortID
+	// 			i["is_parent"] = false
+	// 			if interfaceOpts.InstanceInterface.FloatingIP != nil {
+	// 				i["fip_source"] = interfaceOpts.InstanceInterface.FloatingIP.Source
+	// 				i["existing_fip_id"] = interfaceOpts.InstanceInterface.FloatingIP.ExistingFloatingID
+	// 			}
+	// 			i["ip_address"] = assignmentSubPort.IPAddress.String()
+	//
+	// 			interfacesList = append(interfacesList, i)
+	// 		}
+	// 	}
+	// }
 	if err := d.Set("interface", interfacesList); err != nil {
 		return diag.FromErr(err)
 	}
