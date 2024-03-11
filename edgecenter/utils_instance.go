@@ -70,7 +70,8 @@ func (s instanceInterfaces) Swap(i, j int) {
 
 type OrderedInterfaceOpts struct {
 	InstanceInterfaceWithIPAddress
-	Order int
+	IsParent bool
+	Order    int
 }
 
 // decodeInstanceInterfaceOptsV2 decodes the interface and returns InstanceInterface with FloatingIP.
@@ -133,7 +134,7 @@ func extractInstanceInterfaceToListReadV2(interfaces []interface{}) map[string]O
 		instanceInterfaceWithIPAddress.InstanceInterface = interfaceOpts
 		instanceInterfaceWithIPAddress.IPAddress = iFaceMap["ip_address"].(string)
 		order, _ := iFaceMap["order"].(int)
-		orderedInt := OrderedInterfaceOpts{instanceInterfaceWithIPAddress, order}
+		orderedInt := OrderedInterfaceOpts{InstanceInterfaceWithIPAddress: instanceInterfaceWithIPAddress, Order: order}
 		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.SubnetID] = orderedInt
 		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.NetworkID] = orderedInt
 		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.PortID] = orderedInt
@@ -159,6 +160,7 @@ func extractInstanceInterfaceToListReadV3(interfaces []interface{}) []OrderedInt
 		orderedInstanceIfs.InstanceInterface = interfaceOpts
 		orderedInstanceIfs.IPAddress = iFaceMap["ip_address"].(string)
 		orderedInstanceIfs.Order = iFaceMap["order"].(int)
+		orderedInstanceIfs.IsParent = iFaceMap["is_parent"].(bool)
 
 		orderedInterfacesOpts = append(orderedInterfacesOpts, orderedInstanceIfs)
 	}

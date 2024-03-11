@@ -437,6 +437,7 @@ func resourceBmInstanceRead(ctx context.Context, d *schema.ResourceData, m inter
 	//
 
 	var interfacesList []interface{}
+ifsRfLoop:
 	for _, iface := range ifsFromTf {
 		interfaceOpts := make(map[string]interface{})
 		for _, ifsAPI := range interfacesListAPI {
@@ -445,20 +446,19 @@ func resourceBmInstanceRead(ctx context.Context, d *schema.ResourceData, m inter
 				if subnetID == iface.InstanceInterface.SubnetID ||
 					ifsAPI.PortID == iface.InstanceInterface.PortID ||
 					ifsAPI.NetworkID == iface.InstanceInterface.NetworkID ||
-					assignment.IPAddress.String() == iface.IPAddress {
+					assignment.IPAddress.String() == iface.IPAddress ||
+					iface.IsParent {
 					interfaceOpts["network_id"] = ifsAPI.NetworkID
 					interfaceOpts["subnet_id"] = subnetID
 					interfaceOpts["port_id"] = ifsAPI.PortID
 					if ifsAPI.SubPorts != nil {
 						interfaceOpts["is_parent"] = true
 					}
-				} else {
-					interfaceOpts["network_id"] = iface.InstanceInterface.NetworkID
-					interfaceOpts["subnet_id"] = iface.InstanceInterface.SubnetID
+					interfaceOpts["type"] = iface.InstanceInterface.Type
+					interfaceOpts["order"] = iface.Order
+					interfacesList = append(interfacesList, interfaceOpts)
+					continue ifsRfLoop
 				}
-				interfaceOpts["type"] = iface.InstanceInterface.Type
-				interfaceOpts["order"] = iface.Order
-				interfacesList = append(interfacesList, interfaceOpts)
 			}
 			for _, subIfaceAPI := range ifsAPI.SubPorts {
 				for _, assignment := range subIfaceAPI.IPAssignments {
@@ -470,14 +470,20 @@ func resourceBmInstanceRead(ctx context.Context, d *schema.ResourceData, m inter
 						interfaceOpts["network_id"] = subIfaceAPI.NetworkID
 						interfaceOpts["subnet_id"] = subnetID
 						interfaceOpts["port_id"] = subIfaceAPI.PortID
-					} else {
-						interfaceOpts["network_id"] = iface.InstanceInterface.NetworkID
-						interfaceOpts["subnet_id"] = iface.InstanceInterface.SubnetID
+						interfaceOpts["type"] = iface.InstanceInterface.Type
+						interfaceOpts["order"] = iface.Order
+						interfacesList = append(interfacesList, interfaceOpts)
+						continue ifsRfLoop
 					}
-					interfaceOpts["type"] = iface.InstanceInterface.Type
-					interfaceOpts["order"] = iface.Order
-					interfacesList = append(interfacesList, interfaceOpts)
 				}
+			}
+			interfaceOpts["network_id"] = iface.InstanceInterface.NetworkID
+			interfaceOpts["subnet_id"] = iface.InstanceInterface.SubnetID
+			interfaceOpts["type"] = iface.InstanceInterface.Type
+			interfaceOpts["order"] = iface.Order
+			if iface.InstanceInterface.FloatingIP != nil {
+				interfaceOpts["fip_source"] = iface.InstanceInterface.FloatingIP.Source
+				interfaceOpts["existing_fip_id"] = iface.InstanceInterface.FloatingIP.ExistingFloatingID
 			}
 		}
 	}
