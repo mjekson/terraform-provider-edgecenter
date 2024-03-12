@@ -70,8 +70,9 @@ func (s instanceInterfaces) Swap(i, j int) {
 
 type OrderedInterfaceOpts struct {
 	InstanceInterfaceWithIPAddress
-	IsParent bool
-	Order    int
+	IsParent   bool
+	Order      *int
+	WriteOrder int
 }
 
 // decodeInstanceInterfaceOptsV2 decodes the interface and returns InstanceInterface with FloatingIP.
@@ -123,7 +124,7 @@ func extractInstanceInterfaceToListCreateV2(interfaces []interface{}) []edgeclou
 // extractInstanceInterfaceToListReadV2 creates a list of InterfaceOpts objects from a list of interfaces.
 func extractInstanceInterfaceToListReadV2(interfaces []interface{}) map[string]OrderedInterfaceOpts {
 	orderedInterfacesMap := make(map[string]OrderedInterfaceOpts)
-	for _, iFace := range interfaces {
+	for index, iFace := range interfaces {
 		var instanceInterfaceWithIPAddress InstanceInterfaceWithIPAddress
 		if iFace == nil {
 			continue
@@ -133,13 +134,18 @@ func extractInstanceInterfaceToListReadV2(interfaces []interface{}) map[string]O
 		interfaceOpts := decodeInstanceInterfaceOptsV2(iFaceMap)
 		instanceInterfaceWithIPAddress.InstanceInterface = interfaceOpts
 		instanceInterfaceWithIPAddress.IPAddress = iFaceMap["ip_address"].(string)
-		order, _ := iFaceMap["order"].(int)
-		orderedInt := OrderedInterfaceOpts{InstanceInterfaceWithIPAddress: instanceInterfaceWithIPAddress, Order: order}
-		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.SubnetID] = orderedInt
-		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.NetworkID] = orderedInt
-		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.PortID] = orderedInt
+		var orderedIfc OrderedInterfaceOpts
+		if orderStr, ok := iFaceMap["order"]; ok {
+			order := orderStr.(int)
+			orderedIfc = OrderedInterfaceOpts{InstanceInterfaceWithIPAddress: instanceInterfaceWithIPAddress, Order: &order, WriteOrder: index}
+		} else {
+			orderedIfc = OrderedInterfaceOpts{InstanceInterfaceWithIPAddress: instanceInterfaceWithIPAddress, WriteOrder: index}
+		}
+		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.SubnetID] = orderedIfc
+		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.NetworkID] = orderedIfc
+		orderedInterfacesMap[instanceInterfaceWithIPAddress.InstanceInterface.PortID] = orderedIfc
 		if instanceInterfaceWithIPAddress.InstanceInterface.Type == edgecloudV2.InterfaceTypeExternal {
-			orderedInterfacesMap[string(instanceInterfaceWithIPAddress.InstanceInterface.Type)] = orderedInt
+			orderedInterfacesMap[string(instanceInterfaceWithIPAddress.InstanceInterface.Type)] = orderedIfc
 		}
 	}
 
@@ -159,7 +165,10 @@ func extractInstanceInterfaceToListReadV3(interfaces []interface{}) []OrderedInt
 		interfaceOpts := decodeInstanceInterfaceOptsV2(iFaceMap)
 		orderedInstanceIfs.InstanceInterface = interfaceOpts
 		orderedInstanceIfs.IPAddress = iFaceMap["ip_address"].(string)
-		orderedInstanceIfs.Order = iFaceMap["order"].(int)
+		if orderStr, ok := iFaceMap["order"]; ok {
+			order := orderStr.(int)
+			orderedInstanceIfs.Order = &order
+		}
 		orderedInstanceIfs.IsParent = iFaceMap["is_parent"].(bool)
 
 		orderedInterfacesOpts = append(orderedInterfacesOpts, orderedInstanceIfs)
@@ -207,6 +216,14 @@ func volumeUniqueID(i interface{}) int {
 	e := i.(map[string]interface{})
 	h := md5.New()
 	io.WriteString(h, e["volume_id"].(string))
+	return int(binary.BigEndian.Uint64(h.Sum(nil)))
+}
+
+// volumeUniqueID generates a unique ID for a volume based on its volume_id attribute.
+func interfaceUniqueID(i interface{}) int {
+	e := i.(map[string]interface{})
+	h := md5.New()
+	io.WriteString(h, e["port_id"].(string)+e["type"].(string)+e["subnet_id"].(string))
 	return int(binary.BigEndian.Uint64(h.Sum(nil)))
 }
 
