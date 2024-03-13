@@ -85,8 +85,8 @@ func resourceBmInstance() *schema.Resource {
 				Required: true,
 			},
 			"interface": {
-				Type:     schema.TypeSet,
-				Set:      interfaceUniqueID,
+				Type: schema.TypeList,
+				// Set:      interfaceUniqueID,
 				Required: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
@@ -286,9 +286,7 @@ func resourceBmInstanceCreate(ctx context.Context, d *schema.ResourceData, m int
 	clientV2.Region = regionID
 	clientV2.Project = projectID
 
-	ifsSet := d.Get("interface").(*schema.Set)
-	ifs := ifsSet.List()
-
+	ifs := d.Get("interface").([]interface{})
 	// sort interfaces by 'is_parent' at first and by 'order' key to attach it in right order
 	sort.Sort(instanceInterfaces(ifs))
 	interfaceOptsList := make([]edgecloudV2.BareMetalInterfaceOpts, len(ifs))
@@ -433,8 +431,7 @@ func resourceBmInstanceRead(ctx context.Context, d *schema.ResourceData, m inter
 	}
 
 	ifs := d.Get("interface")
-	ifsSchema := ifs.(*schema.Set)
-	ifsList := ifsSchema.List()
+	ifsList := ifs.([]interface{})
 	old, newIfs := d.GetChange("interface")
 	log.Println(old)
 	log.Println(newIfs)
@@ -704,8 +701,8 @@ func resourceBmInstanceUpdate(ctx context.Context, d *schema.ResourceData, m int
 	if d.HasChange("interface") {
 		ifsOldRaw, ifsNewRaw := d.GetChange("interface")
 
-		ifsOld := ifsOldRaw.(*schema.Set).List()
-		ifsNew := ifsNewRaw.(*schema.Set).List()
+		ifsOld := ifsOldRaw.([]interface{})
+		ifsNew := ifsNewRaw.([]interface{})
 
 		for _, i := range ifsOld {
 			iface := i.(map[string]interface{})
