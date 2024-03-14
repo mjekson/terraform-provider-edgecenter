@@ -158,7 +158,8 @@ func extractKeyValueV2(metadata []interface{}) (map[string]interface{}, error) {
 func volumeUniqueID(i interface{}) int {
 	e := i.(map[string]interface{})
 	h := md5.New()
-	io.WriteString(h, e["volume_id"].(string))
+	val := e["volume_id"].(string)
+	io.WriteString(h, val)
 	return int(binary.BigEndian.Uint64(h.Sum(nil)))
 }
 
@@ -530,7 +531,7 @@ func getSecurityGroupsDifferenceV2(sl1, sl2 []edgecloudV2.ID) (diff []edgecloudV
 // changeVolumes execute code for function resourceInstanceUpdate.
 func changeVolumes(ctx context.Context, d *schema.ResourceData, clientV2 *edgecloudV2.Client) error {
 	oldVolumesRaw, newVolumesRaw := d.GetChange("volume")
-	oldVolumes, newVolumes := oldVolumesRaw.([]interface{}), newVolumesRaw.([]interface{})
+	oldVolumes, newVolumes := oldVolumesRaw.(*schema.Set).List(), newVolumesRaw.(*schema.Set).List()
 
 	oldIDs := getVolumeIDsSet(oldVolumes)
 	newIDs := getVolumeIDsSet(newVolumes)

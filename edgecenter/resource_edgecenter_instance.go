@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-cty/cty"
@@ -107,9 +108,16 @@ func resourceInstance() *schema.Resource {
 				Description:   "A template used to generate the instance name. You can use forms ip_octets, two_ip_octets, one_ip_octet. This field cannot be used with 'name_templates'.",
 			},
 			"volume": {
-				Type:        schema.TypeList,
+				Type:        schema.TypeSet,
+				Set:         volumeUniqueID,
 				Required:    true,
 				Description: "A set defining the volumes to be attached to the instance.",
+				DiffSuppressFunc: func(k, oldValue, newValue string, d *schema.ResourceData) bool {
+					if strings.ToLower(oldValue) == strings.ToLower(newValue) {
+						return true
+					}
+					return false
+				},
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"name": {
@@ -134,7 +142,7 @@ func resourceInstance() *schema.Resource {
 							Type:        schema.TypeInt,
 							Description: "0 should be set for the primary boot device. Unique positive values for other bootable devices. Negative - the boot is prohibited. If boot_index==0 volumes can not detached",
 							Optional:    true,
-							ForceNew:    true,
+							// ForceNew:    true,
 						},
 						"type_name": {
 							Type:        schema.TypeString,
@@ -461,7 +469,7 @@ func resourceInstanceCreate(ctx context.Context, d *schema.ResourceData, m inter
 		createOpts.NameTemplates = []string{nameTemplate.(string)}
 	}
 
-	volumes := d.Get("volume").([]interface{})
+	volumes := d.Get("volume").(*schema.Set).List()
 
 	instanceVolumeCreateList := make([]edgecloudV2.InstanceVolumeCreate, len(volumes))
 
@@ -591,7 +599,9 @@ func resourceInstanceRead(ctx context.Context, d *schema.ResourceData, m interfa
 	flavor["vcpus"] = strconv.Itoa(instance.Flavor.VCPUS)
 	d.Set("flavor", flavor)
 
-	currentVolumes := d.Get("volume").([]interface{})
+	currentVolumes := d.Get("volume").(*schema.Set).List()
+	newVolumes := make([]interface{}, len(currentVolumes))
+
 	for i, v := range currentVolumes {
 		volume := v.(map[string]interface{})
 		volumeID := volume["volume_id"].(string)
@@ -607,12 +617,30 @@ func resourceInstanceRead(ctx context.Context, d *schema.ResourceData, m interfa
 		volume["name"] = volInfo.Name
 		volume["type_name"] = volInfo.VolumeType
 		volume["image_id"] = volInfo.VolumeImageMetadata.ImageID
-		currentVolumes[i] = volume
+		volume["volume_id"] = volumeID
+		newVolumes[i] = volume
 	}
 
-	if err := d.Set("volume", currentVolumes); err != nil {
-		return diag.FromErr(err)
+	newSet := schema.NewSet(volumeUniqueID, newVolumes)
+	oldSet := d.Get("volume").(*schema.Set)
+	diff := newSet.Difference(oldSet)
+	if diff.Len() == 0 { // if !newSet.Equal(oldSet) {
+		if err := d.Set("volume", oldSet); err != nil {
+			return diag.FromErr(err)
+		}
+	} else {
+		if err := d.Set("volume", schema.NewSet(volumeUniqueID, newVolumes)); err != nil {
+			return diag.FromErr(err)
+		}
 	}
+
+	isEqual := newSet.Equal(oldSet)
+	log.Printf("%#+v, %t", *diff, isEqual)
+	// if !newSet.Equal(oldSet) {
+	// 	if err := d.Set("volume", schema.NewSet(volumeUniqueID, newVolumes)); err != nil {
+	// 		return diag.FromErr(err)
+	// 	}
+	// }
 
 	instancePorts, _, err := clientV2.Instances.PortsList(ctx, instanceID)
 	if err != nil {
