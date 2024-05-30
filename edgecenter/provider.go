@@ -32,6 +32,7 @@ const (
 	UpdatedAtField               = "updated_at"
 	LastUpdatedField             = "last_updated"
 	IDField                      = "id"
+	InstanceIDField              = "instance_id"
 	ClientIDField                = "client_id"
 	NameField                    = "name"
 	TagsField                    = "tags"
