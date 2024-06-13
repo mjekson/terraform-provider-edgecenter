@@ -2,6 +2,7 @@ package edgecenter
 
 import (
 	"context"
+	utilV2 "github.com/Edge-Center/edgecentercloud-go/v2/util"
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -11,16 +12,16 @@ import (
 )
 
 const (
-	PortSecurityPortIDsField  = "port_ids"
+	PortSecurityPortIDField   = "port_id"
 	PortSecurityDisabledField = "port_security_disabled"
 )
 
-func resourcePortSecurity() *schema.Resource {
+func resourceInstancePortSecurity() *schema.Resource {
 	return &schema.Resource{
-		CreateContext: resourcePortSecurityCreate,
-		ReadContext:   resourcePortSecurityRead,
-		DeleteContext: resourcePortSecurityDelete,
-		Description:   "Represent port_security resource",
+		CreateContext: resourceInstancePortSecurityCreate,
+		ReadContext:   resourceInstancePortSecurityRead,
+		DeleteContext: resourceInstancePortSecurityDelete,
+		Description:   "Represent instance_port_security resource",
 		Importer: &schema.ResourceImporter{
 			StateContext: func(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 				projectID, regionID, portID, err := ImportStringParser(d.Id())
@@ -68,7 +69,7 @@ func resourcePortSecurity() *schema.Resource {
 			InstanceIDField: {
 				Type:        schema.TypeString,
 				Required:    true,
-				Description: "ID of the instance to which the ports are connected.",
+				Description: "ID of the instance to which the port is connected.",
 			},
 
 			PortSecurityDisabledField: {
@@ -77,15 +78,15 @@ func resourcePortSecurity() *schema.Resource {
 				Default:     false,
 				Optional:    true,
 			},
-			PortSecurityPortIDsField: {
+			PortIDField: {
 				Type:        schema.TypeList,
-				Description: "List of security group IDs.",
+				Description: "ID of the port.",
 				Required:    true,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			SecurityGroupsField: {
 				Type:        schema.TypeList,
-				Description: "The ID of the port.",
+				Description: "List of security groups IDs.",
 				Optional:    true,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
@@ -93,7 +94,7 @@ func resourcePortSecurity() *schema.Resource {
 	}
 }
 
-func resourcePortSecurityCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceInstancePortSecurityCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Println("[DEBUG] Start port_security creating")
 
 	clientV2, err := InitCloudClient(ctx, d, m)
@@ -105,25 +106,50 @@ func resourcePortSecurityCreate(ctx context.Context, d *schema.ResourceData, m i
 	if diags.HasError() {
 		return diags
 	}
-	portsIDsRaw := d.Get(PortSecurityPortIDsField).([]interface{})
+	portID := d.Get(PortIDField).(string)
+	instanceID := d.Get(InstanceIDField).(string)
+
+	instanceIfacePort, err := utilV2.InstanceNetworkInterfaceByID(ctx, clientV2, instanceID, portID)
+	if err != nil {
+		return diag.FromErr(err)
+	}
 	portSecurityDisabled := d.Get(PortSecurityDisabledField).(bool)
-	if portSecurityDisabled {
-		for _, portIDRaw := range portsIDsRaw {
-			portID := portIDRaw.(string)
-			clientV2.Ports.DisablePortSecurity(ctx, portID)
+
+	switch {
+	case portSecurityDisabled && instanceIfacePort.PortSecurityEnabled:
+		_, _, err = clientV2.Ports.DisablePortSecurity(ctx, portID)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		return diags
+	case !portSecurityDisabled && !instanceIfacePort.PortSecurityEnabled:
+		_, _, err = clientV2.Ports.EnablePortSecurity(ctx, portID)
+		if err != nil {
+			return diag.FromErr(err)
 		}
 		return diags
 	}
 
-	for _, portIDRaw := range portsIDsRaw {
-		portID := portIDRaw.(string)
-		clientV2.Ports.DisablePortSecurity(ctx, portID)
+	sgsRaw := d.Get(SecurityGroupsField).([]interface{})
+	sgs := make([]string, len(sgsRaw), len(sgsRaw))
+	for idx, sg := range sgsRaw {
+		sgs[idx] = sg.(string)
+	}
+
+	filteredSGs, err := utilV2.SecurityGroupListByIDs(ctx, clientV2, sgs)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	sgsNames := make([]string, len(filteredSGs), len(filteredSGs))
+	for idx, sg := range filteredSGs {
+		sgsNames[idx] = sg.Name
 	}
 
 	portSGNames := edgecloudV2.PortsSecurityGroupNames{
-		SecurityGroupNames: []string{sgInfo.Name},
+		SecurityGroupNames: sgsNames,
 		PortID:             portID,
 	}
+
 	sgOpts := edgecloudV2.AssignSecurityGroupRequest{PortsSecurityGroupNames: []edgecloudV2.PortsSecurityGroupNames{portSGNames}}
 
 	log.Printf("[DEBUG] attach security group opts: %+v", sgOpts)
@@ -132,14 +158,12 @@ func resourcePortSecurityCreate(ctx context.Context, d *schema.ResourceData, m i
 		return diag.Errorf("cannot attach security group. Error: %w", err)
 	}
 
-	d.SetId(serverGroup.ID)
-	resourcePortSecurityRead(ctx, d, m)
-	log.Println("[DEBUG] Finish ServerGroup creating")
+	log.Println("[DEBUG] Finish instance_port_security creating")
 
 	return diags
 }
 
-func resourcePortSecurityRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceInstancePortSecurityRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Println("[DEBUG] Start ServerGroup reading")
 	var diags diag.Diagnostics
 	config := m.(*Config)
@@ -179,7 +203,7 @@ func resourcePortSecurityRead(ctx context.Context, d *schema.ResourceData, m int
 	return diags
 }
 
-func resourcePortSecurityDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+func resourceInstancePortSecurityDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Println("[DEBUG] Start ServerGroup deleting")
 	var diags diag.Diagnostics
 	config := m.(*Config)
