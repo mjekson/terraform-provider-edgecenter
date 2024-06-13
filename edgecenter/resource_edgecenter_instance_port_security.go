@@ -166,25 +166,23 @@ func resourceInstancePortSecurityCreate(ctx context.Context, d *schema.ResourceD
 func resourceInstancePortSecurityRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	log.Println("[DEBUG] Start ServerGroup reading")
 	var diags diag.Diagnostics
-	config := m.(*Config)
-	clientV2 := config.CloudClient
 
-	regionID, projectID, err := GetRegionIDandProjectID(ctx, clientV2, d)
+	clientV2, err := InitCloudClient(ctx, d, m)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	clientV2.Region = regionID
-	clientV2.Project = projectID
-	d.Set("project_id", projectID)
-	d.Set("region_id", regionID)
+	portID := d.Get(PortIDField).(string)
+	instanceID := d.Get(InstanceIDField).(string)
 
-	serverGroup, _, err := clientV2.ServerGroups.Get(ctx, d.Id())
+	instanceIfacePort, err := utilV2.InstanceNetworkInterfaceByID(ctx, clientV2, instanceID, portID)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	d.Set("name", serverGroup.Name)
+	sgIDs := make([]string, len(instanceIfacePort.))
+
+	d.Set(PortSecurityDisabledField,!instanceIfacePort.PortSecurityEnabled )
 	d.Set("policy", serverGroup.Policy)
 
 	instances := make([]map[string]string, len(serverGroup.Instances))
